@@ -10,57 +10,136 @@ const PWANI_DEPARTMENTS = [
   { id: 4, name: "School of Agriculture and Environmental Sciences" },
 ];
 
-const PWANI_PROGRAMS = [
-  "Bachelor of Science (Computer Science)",
-  "Bachelor of Science (Nursing)",
-  "Bachelor of Science (Biotechnology)",
-  "Bachelor of Science (Microbiology)",
-  "Bachelor of Science (Chemistry)",
-  "Bachelor of Science (Physics, Mathematics, Statistics)",
-  "Bachelor of Science (Environmental Health)",
-  "Bachelor of Science (Industrial Chemistry)",
-  "Bachelor of Science (Biochemistry)",
-  "Bachelor of Science (Marine)",
-  "Diploma in Computer Science",
-  "Diploma in Applied Biology",
-  "Bachelor of Education (Arts)",
-  "Bachelor of Education (Science)",
-  "Bachelor of Education (Early Childhood Education)",
-  "Bachelor of Education (Special Needs)",
-  "Bachelor of Science (Agri. Educ. and Extension)",
-  "Diploma in Early Childhood Development",
-  "Diploma Primary Education",
-  "Diploma in Guidance & Counseling",
-  "Bachelor of Commerce",
-  "Bachelor of Arts (General)",
-  "Bachelor of Science (Hospitality and Tourism Mgt)",
-  "Bachelor of Science (Food, Nutrition & Dietetics)",
-  "Bachelor of Science (Tourism Management)",
-  "Diploma in Hospitality and Tourism Mgt",
-  "Diploma in Nutrition & Health",
-  "Bachelor of Environmental Science",
-  "Bachelor of Science (Horticulture)",
-  "Bachelor of Science (Agribusiness Management and Trade)",
-  "Bachelor of Science (Animal Production and Health)",
-  "Diploma in Agriculture and Marketing",
-  "Diploma in Community Development",
-  "Masters of Business Administration (MBA)",
-  "Masters of Education",
-  "Masters of Science (Applied Entomology)",
-  "Masters of Science (Fisheries)",
-  "Masters of Science (Microbiology)",
-  "PhD - Chemistry",
-  "PhD - Environmental Science",
-  "PhD - Sociology",
-];
+const PWANI_PROGRAMS_BY_SCHOOL = {
+  "School of Pure and Applied Sciences": [
+    "Bachelor of Science (Computer Science)",
+    "Bachelor of Science (Nursing)",
+    "Bachelor of Science (Nursing Upgrading)",
+    "Bachelor of Science (Biotechnology)",
+    "Bachelor of Science (Microbiology)",
+    "Bachelor of Science (Chemistry)",
+    "Bachelor of Science (Physics, Mathematics, Statistics)",
+    "Bachelor of Science (Environmental Health)",
+    "Bachelor of Science (Industrial Chemistry)",
+    "Bachelor of Science (Biochemistry)",
+    "Bachelor of Science (Marine)",
+    "Diploma in Computer Science",
+    "Diploma in Applied Biology",
+    "Masters in Chemistry",
+    "Masters of Science (Applied Entomology)",
+    "Masters of Science (Physics)",
+    "Masters of Science (Fisheries)",
+    "Masters of Science (Microbiology)",
+    "Masters of Health",
+    "PhD - Statistics",
+    "PhD - Chemistry",
+    "PhD - Medical Entomology",
+  ],
+  "School of Education": [
+    "Bachelor of Education (Arts)",
+    "Bachelor of Education (Science)",
+    "Bachelor of Education (Early Childhood Education)",
+    "Bachelor of Education (Special Needs)",
+    "Bachelor of Education Arts (French)",
+    "Bachelor of Education Science (Agriculture)",
+    "Bachelor of Education Science (Computer)",
+    "Bachelor of Science (Agri. Educ. and Extension)",
+    "Diploma in Early Childhood Development",
+    "Diploma Primary Education",
+    "Diploma in Agri. Educ and Extension",
+    "Diploma in Guidance & Counseling",
+    "Certificate in Early Childhood Development",
+    "Masters of Education",
+    "Masters of Education (Curriculum Development)",
+    "Masters of Education (Psychology)",
+    "Masters of Education (Special Needs)",
+    "Masters in Management In Education",
+    "Masters in AGED",
+    "Masters of Education Planning",
+    "Masters in Education (Science and Maths methods)",
+    "PhD - Educational Psychology",
+    "PhD - Education Administration",
+    "PhD - Educational Planning",
+    "PhD - History Of Education",
+    "PhD - Sociology Of Education",
+    "PhD - Communication Technology and French",
+  ],
+  "School of Humanities and Social Sciences": [
+    "Bachelor of Commerce",
+    "Bachelor of Arts (General)",
+    "Bachelor of Science (Hospitality and Tourism Mgt)",
+    "Bachelor of Science (Food, Nutrition & Dietetics)",
+    "Bachelor of Science (Tourism Management)",
+    "Diploma in Hospitality and Tourism Mgt",
+    "Diploma in Nutrition & Health",
+    "Diploma in Travel and Tour Operations",
+    "Masters of Business Administration (MBA)",
+    "M.A - Religious Studies",
+    "M.A - English",
+    "M.A - Kiswahili",
+    "M.A - Literature",
+    "M.A - Sociology",
+    "M.A - History",
+    "PhD - Religious Studies",
+    "PhD - Linguistics (English and Kiswahili)",
+    "PhD - Literature",
+    "PhD - Psychology",
+    "PhD - Sociology",
+    "PhD - Geography",
+  ],
+  "School of Agriculture and Environmental Sciences": [
+    "Bachelor of Environmental Science",
+    "Bachelor of Environmental Studies (Community Development)",
+    "Bachelor of Environmental Planning & Management",
+    "Bachelor of Science (Agri. Enterprise Development)",
+    "Bachelor of Science (Agricultural Resource Management)",
+    "Bachelor of Science (Animal Production and Health)",
+    "Bachelor of Science (Horticulture)",
+    "Bachelor of Science (Agribusiness Management and Trade)",
+    "Diploma in Animal Health Management",
+    "Diploma in Community Development",
+    "Diploma in Agriculture and Marketing",
+    "Diploma in Horticulture and Marketing",
+    "Certificate in Agriculture",
+    "Certificate in Community Development",
+    "Masters in Environmental Studies (Community Development)",
+    "Masters in Environmental Science",
+    "Masters of Science (Livestock)",
+    "Masters of Science (Agronomy)",
+    "Masters of Science (Environmental Science - CD)",
+    "PhD - Environmental Planning and Management",
+    "PhD - Environmental Science",
+    "PhD - Horticulture",
+  ],
+};
 
 function App() {
-  const [page, setPage] = useState("overview");
+  const [user, setUser] = useState(() => {
+    const saved = sessionStorage.getItem('pu_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const handleLogin = (userData) => {
+    sessionStorage.setItem('pu_user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('pu_user');
+    setUser(null);
+  };
+
+  if (!user) return <LoginPage onLogin={handleLogin} />;
+ 
+  return <Dashboard user={user} onLogout={handleLogout} />;
+}
+function Dashboard({ user, onLogout }) {
   const [overview, setOverview] = useState(null);
   const [students, setStudents] = useState([]);
   const [courses, setCourses] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [page, setPage] = useState("overview");
 
   const loadStudents = () => axios.get(`${API}/students`).then(r => setStudents(r.data)).catch(() => {});
   const loadCourses = () => axios.get(`${API}/courses`).then(r => setCourses(r.data)).catch(() => {});
@@ -128,7 +207,13 @@ function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ background: "#eafaf1", color: "#1e8449", border: "1px solid #82e0aa", borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 700 }}>● System Online</div>
-            <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#0a3d62", color: "white", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14 }}>AD</div>
+            <div style={{ fontSize: 13, color: "#4a5568", fontWeight: 600 }}>{user?.full_name}</div>
+            <div style={{ background: user?.role === 'admin' ? '#f39c12' : '#148f77', color: 'white', borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>
+              {user?.role === 'admin' ? '👑 Admin' : '👨‍🏫 Lecturer'}
+            </div>
+            <button onClick={onLogout} style={{ padding: "6px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "white", color: "#c0392b", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+              Logout
+            </button>
           </div>
         </div>
 
@@ -144,7 +229,236 @@ function App() {
       </div>
     </div>
   );
+}function LoginPage({ onLogin }) {
+  const [mode, setMode] = useState("admin");
+  const [tab, setTab] = useState("login");
+  const [form, setForm] = useState({ email: "", password: "" });
+  const [regForm, setRegForm] = useState({ staff_no: "", full_name: "", email: "", password: "", confirm_password: "", department_id: "1" });
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [departments, setDepartments] = useState([]);
+
+  useEffect(() => {
+    axios.get(`${API}/departments`).then(r => setDepartments(r.data)).catch(() => {});
+  }, []);
+
+  const handleLogin = async () => {
+    if (!form.email || !form.password) return setError("Email and password are required.");
+    setLoading(true); setError("");
+    try {
+      const r = await axios.post(`${API}/auth/login`, form);
+      if (r.data.success) onLogin(r.data);
+      else setError(r.data.error || "Invalid credentials.");
+    } catch (e) {
+      setError(e.response?.data?.error || "Login failed. Check your credentials.");
+    }
+    setLoading(false);
+  };
+
+  const handleRegister = async () => {
+    if (!regForm.full_name || !regForm.email || !regForm.password) return setError("All fields are required.");
+    if (regForm.password !== regForm.confirm_password) return setError("Passwords do not match.");
+    if (regForm.password.length < 6) return setError("Password must be at least 6 characters.");
+    setLoading(true); setError(""); setSuccess("");
+    try {
+      await axios.post(`${API}/auth/register-lecturer`, regForm);
+      setSuccess("✅ Registration successful! You can now log in.");
+      setTab("login");
+      setForm({ email: regForm.email, password: "" });
+      setRegForm({ full_name: "", email: "", password: "", confirm_password: "", department_id: "1" });
+    } catch (e) {
+      setError(e.response?.data?.error || "Registration failed.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a3d62 0%, #1a5276 50%, #148f77 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Segoe UI, sans-serif" }}>
+      <div style={{ width: "100%", maxWidth: 460, padding: 24 }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <div style={{ width: 70, height: 70, borderRadius: 20, background: "#f39c12", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 900, color: "white", margin: "0 auto 14px" }}>PU</div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: "white" }}>Pwani University</div>
+          <div style={{ fontSize: 13, color: "#a9c8e8", marginTop: 4 }}>Performance Analytics System</div>
+        </div>
+
+        {/* Mode selector */}
+        <div style={{ display: "flex", gap: 10, marginBottom: 16, justifyContent: "center" }}>
+          {[
+            { id: "admin", label: "👑 Admin", color: "#f39c12" },
+            { id: "lecturer", label: "👨‍🏫 Lecturer", color: "#148f77" },
+          ].map(m => (
+            <button key={m.id} onClick={() => { setMode(m.id); setTab("login"); setError(""); setSuccess(""); setForm({ email: "", password: "" }); }}
+              style={{ padding: "10px 28px", borderRadius: 10, border: `2px solid ${mode === m.id ? m.color : "rgba(255,255,255,0.3)"}`, background: mode === m.id ? m.color : "rgba(255,255,255,0.1)", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Card */}
+        <div style={{ background: "white", borderRadius: 20, padding: 32, boxShadow: "0 20px 60px #00000033" }}>
+          {mode === "lecturer" && (
+            <div style={{ display: "flex", marginBottom: 24, background: "#f0f4f8", borderRadius: 10, padding: 4 }}>
+              {[{ id: "login", label: "Login" }, { id: "register", label: "Register" }].map(t => (
+                <button key={t.id} onClick={() => { setTab(t.id); setError(""); setSuccess(""); }}
+                  style={{ flex: 1, padding: "9px 0", borderRadius: 8, border: "none", background: tab === t.id ? "white" : "transparent", color: tab === t.id ? "#0a3d62" : "#718096", fontWeight: tab === t.id ? 700 : 500, fontSize: 13, cursor: "pointer", boxShadow: tab === t.id ? "0 2px 8px #0000001a" : "none" }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ textAlign: "center", marginBottom: 20 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#1a202c" }}>
+              {mode === "admin" ? "Admin Login" : tab === "login" ? "Lecturer Login" : "Lecturer Registration"}
+            </div>
+            <div style={{ fontSize: 12, color: "#a0aec0", marginTop: 4 }}>
+              {mode === "admin" ? "Sign in with your administrator credentials" : tab === "login" ? "Sign in to your lecturer account" : "Create a new lecturer account"}
+            </div>
+          </div>
+
+          {error && <div style={{ background: "#fdf2f2", border: "1px solid #f1948a", borderRadius: 8, padding: "10px 14px", color: "#c0392b", fontSize: 13, marginBottom: 16, fontWeight: 600 }}>{error}</div>}
+          {success && <div style={{ background: "#eafaf1", border: "1px solid #82e0aa", borderRadius: 8, padding: "10px 14px", color: "#1e8449", fontSize: 13, marginBottom: 16, fontWeight: 600 }}>{success}</div>}
+{tab === "forgot" && (
+            <div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>EMAIL ADDRESS</label>
+                <input type="email" placeholder="Enter your registered email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+              </div>
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>NEW PASSWORD</label>
+                <input type="password" placeholder="Min 6 characters" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+              </div>
+              <button onClick={async () => {
+                if (!form.email || !form.password) return setError("Email and new password are required.");
+                if (form.password.length < 6) return setError("Password must be at least 6 characters.");
+                setLoading(true); setError("");
+                try {
+                  await axios.post(`${API}/auth/forgot-password`, { email: form.email, new_password: form.password });
+                  setSuccess("✅ Password reset successfully! You can now login.");
+                  setTab("login");
+                  setForm({ email: form.email, password: "" });
+                } catch(e) {
+                  setError(e.response?.data?.error || "Reset failed. Email not found.");
+                }
+                setLoading(false);
+              }} disabled={loading}
+                style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: loading ? "#a0aec0" : "#7d3c98", color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
+                {loading ? "Resetting..." : "Reset Password →"}
+              </button>
+              <div style={{ textAlign: "center", marginTop: 14 }}>
+                <button onClick={() => { setTab("login"); setError(""); }}
+                  style={{ background: "none", border: "none", color: "#0a3d62", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
+                  ← Back to Login
+                </button>
+              </div>
+            </div>
+          )}
+          {(mode === "admin" || tab === "login") && (
+            <div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>EMAIL ADDRESS</label>
+                <input type="email" placeholder="Enter your email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                  onKeyDown={e => e.key === "Enter" && handleLogin()}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+              </div>
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>PASSWORD</label>
+                <input type="password" placeholder="Enter your password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                  onKeyDown={e => e.key === "Enter" && handleLogin()}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+              </div>
+              <button onClick={handleLogin} disabled={loading}
+                style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: loading ? "#a0aec0" : mode === "admin" ? "#f39c12" : "#0a3d62", color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
+                {loading ? "Signing in..." : "Login →"}
+              </button>
+              <div style={{ textAlign: "center", marginTop: 14 }}>
+                <button onClick={() => { setTab("forgot"); setError(""); }}
+                  style={{ background: "none", border: "none", color: "#0a3d62", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
+                  Forgot Password?
+                </button>
+              </div>
+            </div>
+          )}
+          {tab === "forgot" && (
+            <div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>EMAIL ADDRESS</label>
+                <input type="email" placeholder="Enter your registered email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+              </div>
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>NEW PASSWORD</label>
+                <input type="password" placeholder="Min 6 characters" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+              </div>
+              <button onClick={async () => {
+                if (!form.email || !form.password) return setError("Email and new password are required.");
+                if (form.password.length < 6) return setError("Password must be at least 6 characters.");
+                setLoading(true); setError("");
+                try {
+                  await axios.post(`${API}/auth/forgot-password`, { email: form.email, new_password: form.password });
+                  setSuccess("✅ Password reset successfully! You can now login.");
+                  setTab("login");
+                  setForm({ email: form.email, password: "" });
+                } catch(e) {
+                  setError(e.response?.data?.error || "Reset failed. Email not found.");
+                }
+                setLoading(false);
+              }} disabled={loading}
+                style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: loading ? "#a0aec0" : "#7d3c98", color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
+                {loading ? "Resetting..." : "Reset Password →"}
+              </button>
+              <div style={{ textAlign: "center", marginTop: 14 }}>
+                <button onClick={() => { setTab("login"); setError(""); }}
+                  style={{ background: "none", border: "none", color: "#0a3d62", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
+                  ← Back to Login
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mode === "lecturer" && tab === "register" && (
+            <div>
+              {[
+                { label: "STAFF NUMBER *", key: "staff_no", placeholder: "e.g. PU/STAFF/001", type: "text" },
+              { label: "FULL NAME *", key: "full_name", placeholder: "e.g. Dr. John Mwangi", type: "text" },
+                { label: "EMAIL ADDRESS *", key: "email", placeholder: "e.g. john@pu.ac.ke", type: "email" },
+                { label: "PASSWORD *", key: "password", placeholder: "Min 6 characters", type: "password" },
+                { label: "CONFIRM PASSWORD *", key: "confirm_password", placeholder: "Re-enter password", type: "password" },
+              ].map(f => (
+                <div key={f.key} style={{ marginBottom: 14 }}>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>{f.label}</label>
+                  <input type={f.type} placeholder={f.placeholder} value={regForm[f.key]} onChange={e => setRegForm({ ...regForm, [f.key]: e.target.value })}
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+                </div>
+              ))}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>SCHOOL *</label>
+                <select value={regForm.department_id} onChange={e => setRegForm({ ...regForm, department_id: e.target.value })}
+                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
+                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+              <button onClick={handleRegister} disabled={loading}
+                style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: loading ? "#a0aec0" : "#148f77", color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
+                {loading ? "Registering..." : "Register →"}
+              </button>
+            </div>
+          )}
+        </div>
+        <div style={{ textAlign: "center", marginTop: 20, color: "#a9c8e8", fontSize: 12 }}>
+          © 2024/2025 Pwani University — Performance Analytics System
+        </div>
+      </div>
+    </div>
+  );
 }
+// end Dashboard
+
 function StatCard({ label, value, icon, color, onClick, subtitle }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -296,12 +610,14 @@ function Students({ students, departments, onRefresh }) {
                 {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
-            <div>
+           <div>
               <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>PROGRAMME</label>
               <select value={form.program} onChange={e => setForm({ ...form, program: e.target.value })}
                 style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
                 <option value="">Select Programme</option>
-                {PWANI_PROGRAMS.map((p, i) => <option key={i} value={p}>{p}</option>)}
+                {(PWANI_PROGRAMS_BY_SCHOOL[departments.find(d => d.id == form.department_id)?.name] || []).map((p, i) => (
+                  <option key={i} value={p}>{p}</option>
+                ))}
               </select>
             </div>
             <div>

@@ -77,6 +77,99 @@ def health():
 @app.route('/api/departments', methods=['GET'])
 def get_departments():
     return json_response(query("SELECT * FROM departments ORDER BY name"))
+import hashlib
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    data = request.json
+    email = data.get('email', '').strip()
+    password = data.get('password', '').strip()
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+    # Check admin
+    admin = query("SELECT * FROM admin_users WHERE email = %s AND password_hash = %s", (email, password_hash), fetch='one')
+    if admin:
+        return json_response({
+            'success': True,
+            'role': 'admin',
+            'id': admin['id'],
+            'full_name': admin['full_name'],
+            'email': admin['email'],
+            'token': f"admin_{admin['id']}_{password_hash[:16]}"
+        })
+
+    # Check lecturer
+    lecturer = query("SELECT * FROM lecturers WHERE email = %s AND password_hash = %s AND is_active = 1", (email, password_hash), fetch='one')
+    if lecturer:
+        courses = query("""
+            SELECT c.* FROM courses c
+            WHERE c.id IN (
+                SELECT DISTINCT course_id FROM attendance_sessions WHERE lecturer_id = %s
+            )
+        """, (lecturer['id'],))
+        return json_response({
+            'success': True,
+            'role': 'lecturer',
+            'id': lecturer['id'],
+            'full_name': lecturer['full_name'],
+            'email': lecturer['email'],
+            'staff_no': lecturer.get('staff_no'),
+            'department_id': lecturer.get('department_id'),
+            'token': f"lecturer_{lecturer['id']}_{password_hash[:16]}",
+            'courses': courses
+        })
+
+    return json_response({'success': False, 'error': 'Invalid email or password'}, 401)
+@app.route('/api/auth/register-lecturer', methods=['POST'])
+def register_lecturer():
+    data = request.json
+    if not data.get('full_name') or not data.get('email') or not data.get('password') or not data.get('staff_no'):
+        return json_response({'error': 'All fields including Staff Number are required'}, 400)
+    password_hash = hashlib.sha256(data['password'].encode()).hexdigest()
+    existing = query("SELECT id FROM lecturers WHERE email = %s OR staff_no = %s", (data['email'], data['staff_no']), fetch='one')
+    if existing:
+        return json_response({'error': 'Email or Staff Number already registered'}, 400)
+    lid = execute("""
+        INSERT INTO lecturers (staff_no, full_name, email, password_hash, role, department_id, is_active)
+        VALUES (%s, %s, %s, %s, 'lecturer', %s, 1)
+    """, (data['staff_no'], data['full_name'], data['email'], password_hash, data.get('department_id', 1)))
+    return json_response({'id': lid, 'message': 'Lecturer registered successfully'}, 201)
+@app.route('/api/auth/forgot-password', methods=['POST'])
+def forgot_password():
+    data = request.json
+    email = data.get('email', '').strip()
+    new_password = data.get('new_password', '').strip()
+    if not email or not new_password:
+        return json_response({'error': 'Email and new password are required'}, 400)
+    if len(new_password) < 6:
+        return json_response({'error': 'Password must be at least 6 characters'}, 400)
+    new_hash = hashlib.sha256(new_password.encode()).hexdigest()
+    # Check admin
+    admin = query("SELECT id FROM admin_users WHERE email = %s", (email,), fetch='one')
+    if admin:
+        execute("UPDATE admin_users SET password_hash = %s WHERE email = %s", (new_hash, email))
+        return json_response({'message': 'Password reset successfully'})
+    # Check lecturer
+    lecturer = query("SELECT id FROM lecturers WHERE email = %s AND is_active = 1", (email,), fetch='one')
+    if lecturer:
+        execute("UPDATE lecturers SET password_hash = %s WHERE email = %s", (new_hash, email))
+        return json_response({'message': 'Password reset successfully'})
+    return json_response({'error': 'Email not found in our system'}, 404)
+
+@app.route('/api/lecturers', methods=['GET'])
+def get_lecturers():
+    rows = query("""
+        SELECT l.id, l.full_name, l.email, l.role, l.is_active, d.name as department_name
+        FROM lecturers l
+        LEFT JOIN departments d ON d.id = l.department_id
+        ORDER BY l.full_name
+    """)
+    return json_response(rows)
+
+@app.route('/api/lecturers/<int:lid>', methods=['DELETE'])
+def delete_lecturer(lid):
+    execute("UPDATE lecturers SET is_active = 0 WHERE id = %s", (lid,))
+    return json_response({'message': 'Lecturer deactivated'})
 
 @app.route('/api/students', methods=['GET'])
 def get_students():
@@ -88,6 +181,24 @@ def get_students():
         ORDER BY s.full_name
     """)
     return json_response(rows)
+@app.route('/api/auth/change-password', methods=['POST'])
+def change_password():
+    data = request.json
+    old_hash = hashlib.sha256(data['old_password'].encode()).hexdigest()
+    new_hash = hashlib.sha256(data['new_password'].encode()).hexdigest()
+    role = data.get('role')
+    uid = data.get('id')
+    if role == 'admin':
+        user = query("SELECT * FROM admin_users WHERE id = %s AND password_hash = %s", (uid, old_hash), fetch='one')
+        if not user:
+            return json_response({'error': 'Current password is incorrect'}, 400)
+        execute("UPDATE admin_users SET password_hash = %s WHERE id = %s", (new_hash, uid))
+    else:
+        user = query("SELECT * FROM lecturers WHERE id = %s AND password_hash = %s", (uid, old_hash), fetch='one')
+        if not user:
+            return json_response({'error': 'Current password is incorrect'}, 400)
+        execute("UPDATE lecturers SET password_hash = %s WHERE id = %s", (new_hash, uid))
+    return json_response({'message': 'Password changed successfully'})
 
 @app.route('/api/students/<int:sid>', methods=['GET'])
 def get_student(sid):
@@ -166,13 +277,6 @@ def delete_course(cid):
     execute("DELETE FROM courses WHERE id = %s", (cid,))
     return json_response({'message': 'Course deleted'})
 
-@app.route('/api/students/<int:sid>', methods=['DELETE'])
-def delete_student(sid):
-    execute("DELETE FROM submissions WHERE student_id = %s", (sid,))
-    execute("DELETE FROM attendance_records WHERE student_id = %s", (sid,))
-    execute("DELETE FROM enrollments WHERE student_id = %s", (sid,))
-    execute("DELETE FROM students WHERE id = %s", (sid,))
-    return json_response({'message': 'Student deleted'})
 @app.route('/api/attendance/sessions', methods=['GET'])
 def get_sessions():
     course_id = request.args.get('course_id')
