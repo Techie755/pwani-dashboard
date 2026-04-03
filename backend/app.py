@@ -256,6 +256,23 @@ def get_course_students(cid):
         ORDER BY va.full_name
     """, (cid,))
     return json_response(rows)
+@app.route('/api/enrollments', methods=['POST'])
+def enroll_student():
+    data = request.json
+    existing = query("SELECT id FROM enrollments WHERE student_id = %s AND course_id = %s", 
+                    (data['student_id'], data['course_id']), fetch='one')
+    if existing:
+        return json_response({'error': 'Student already enrolled'}, 400)
+    eid = execute("INSERT INTO enrollments (student_id, course_id) VALUES (%s, %s)", 
+                  (data['student_id'], data['course_id']))
+    return json_response({'id': eid, 'message': 'Student enrolled'}, 201)
+
+@app.route('/api/enrollments', methods=['DELETE'])
+def unenroll_student():
+    data = request.json
+    execute("DELETE FROM enrollments WHERE student_id = %s AND course_id = %s", 
+            (data['student_id'], data['course_id']))
+    return json_response({'message': 'Student removed from course'})
 @app.route('/api/courses', methods=['POST'])
 def create_course():
     data = request.json

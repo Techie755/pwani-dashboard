@@ -134,6 +134,8 @@ function App() {
   return <Dashboard user={user} onLogout={handleLogout} />;
 }
 function Dashboard({ user, onLogout }) {
+  const isAdmin = user?.role === 'admin';
+  const isLecturer = user?.role === 'lecturer';
   const [overview, setOverview] = useState(null);
   const [students, setStudents] = useState([]);
   const [courses, setCourses] = useState([]);
@@ -153,16 +155,21 @@ function Dashboard({ user, onLogout }) {
     axios.get(`${API}/departments`).then(r => setDepartments(r.data)).catch(() => {});
   }, []);
 
-  const navItems = [
+const navItems = [
     { id: "overview", label: "Dashboard", icon: "🏠" },
     { id: "students", label: "Students", icon: "🎓" },
     { id: "courses", label: "Courses", icon: "📚" },
     { id: "attendance", label: "Attendance", icon: "📋" },
     { id: "assignments", label: "Assessments", icon: "📝" },
     { id: "insights", label: "Insights", icon: "💡" },
+    ...(isAdmin ? [
+      { id: "enrollments", label: "Enrollments", icon: "🔗" },
+      { id: "lecturers", label: "Lecturers", icon: "👨‍🏫" },
+      { id: "settings", label: "Settings", icon: "⚙️" },
+    ] : []),
   ];
 
-  const pageTitle = { overview: "Dashboard", students: "Students", courses: "Courses", attendance: "Attendance", assignments: "Assessments", insights: "Insights" };
+  const pageTitle = { overview: "Dashboard", students: "Students", courses: "Courses", attendance: "Attendance", assignments: "Assessments", insights: "Insights", enrollments: "Student Enrollments", lecturers: "Manage Lecturers", settings: "Settings" };
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "'Segoe UI', Arial, sans-serif", background: "#f0f4f8" }}>
@@ -225,6 +232,9 @@ function Dashboard({ user, onLogout }) {
           {page === "attendance" && <Attendance courses={courses} />}
           {page === "assignments" && <Assignments courses={courses} />}
           {page === "insights" && <Insights students={students} />}
+          {page === "enrollments" && isAdmin && <Enrollments students={students} courses={courses} />}
+          {page === "lecturers" && isAdmin && <LecturersAdmin />}
+          {page === "settings" && <Settings user={user} />}
         </div>
       </div>
     </div>
@@ -1265,6 +1275,217 @@ function Insights({ students }) {
           </table>
         </div>
       )}
+    </div>
+  );
+}
+function Enrollments({ students, courses }) {
+  const [enrollments, setEnrollments] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [enrolled, setEnrolled] = useState([]);
+  const [msg, setMsg] = useState("");
+
+  const loadEnrolled = (course) => {
+    setSelectedCourse(course);
+    setMsg("");
+    axios.get(`${API}/courses/${course.id}/students`).then(r => setEnrolled(r.data)).catch(() => setEnrolled([]));
+  };
+
+  const enrollStudent = (studentId) => {
+    axios.post(`${API}/enrollments`, { student_id: studentId, course_id: selectedCourse.id })
+      .then(() => { setMsg("✅ Student enrolled!"); loadEnrolled(selectedCourse); })
+      .catch(e => setMsg("❌ " + (e.response?.data?.error || "Already enrolled or error.")));
+  };
+
+  const unenrollStudent = (studentId) => {
+    if (!window.confirm("Remove this student from the course?")) return;
+    axios.delete(`${API}/enrollments`, { data: { student_id: studentId, course_id: selectedCourse.id } })
+      .then(() => { setMsg("✅ Student removed."); loadEnrolled(selectedCourse); })
+      .catch(() => setMsg("❌ Could not remove student."));
+  };
+
+  const enrolledIds = enrolled.map(e => e.student_id);
+  const notEnrolled = students.filter(s => !enrolledIds.includes(s.id));
+
+  return (
+    <div>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 10, color: "#1a202c" }}>Select a course to manage enrollments:</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {courses.map(c => (
+            <button key={c.id} onClick={() => loadEnrolled(c)}
+              style={{ padding: "8px 16px", borderRadius: 20, border: `2px solid ${selectedCourse?.id === c.id ? "#0a3d62" : "#e2e8f0"}`, background: selectedCourse?.id === c.id ? "#0a3d62" : "white", color: selectedCourse?.id === c.id ? "white" : "#4a5568", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              {c.code}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {msg && <div style={{ padding: "10px 14px", borderRadius: 8, background: msg.startsWith("✅") ? "#eafaf1" : "#fdf2f2", color: msg.startsWith("✅") ? "#1e8449" : "#c0392b", fontWeight: 600, fontSize: 13, marginBottom: 16 }}>{msg}</div>}
+
+      {selectedCourse && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          {/* Enrolled */}
+          <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 8px #0000000d" }}>
+            <div style={{ padding: "14px 18px", background: "#eafaf1", borderBottom: "1px solid #82e0aa" }}>
+              <div style={{ fontWeight: 800, color: "#1e8449" }}>✅ Enrolled Students ({enrolled.length})</div>
+              <div style={{ fontSize: 12, color: "#718096" }}>{selectedCourse.code} — {selectedCourse.name}</div>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                {enrolled.map((s, i) => (
+                  <tr key={s.student_id} style={{ borderTop: i > 0 ? "1px solid #f0f4f8" : "none" }}>
+                    <td style={{ padding: "10px 14px", fontWeight: 600, fontSize: 13 }}>{s.full_name}</td>
+                    <td style={{ padding: "10px 14px", fontSize: 12, color: "#718096", fontFamily: "monospace" }}>{s.reg_no}</td>
+                    <td style={{ padding: "10px 14px" }}>
+                      <button onClick={() => unenrollStudent(s.student_id)}
+                        style={{ padding: "4px 12px", borderRadius: 6, border: "1.5px solid #f1948a", background: "#fdf2f2", color: "#c0392b", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {enrolled.length === 0 && <tr><td colSpan={3} style={{ textAlign: "center", padding: 30, color: "#a0aec0" }}>No students enrolled yet</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Not enrolled */}
+          <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 8px #0000000d" }}>
+            <div style={{ padding: "14px 18px", background: "#eaf4fb", borderBottom: "1px solid #85c1e9" }}>
+              <div style={{ fontWeight: 800, color: "#1a6b8a" }}>➕ Available Students ({notEnrolled.length})</div>
+              <div style={{ fontSize: 12, color: "#718096" }}>Click to enroll in {selectedCourse.code}</div>
+            </div>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <tbody>
+                {notEnrolled.map((s, i) => (
+                  <tr key={s.id} style={{ borderTop: i > 0 ? "1px solid #f0f4f8" : "none" }}>
+                    <td style={{ padding: "10px 14px", fontWeight: 600, fontSize: 13 }}>{s.full_name}</td>
+                    <td style={{ padding: "10px 14px", fontSize: 12, color: "#718096", fontFamily: "monospace" }}>{s.reg_no}</td>
+                    <td style={{ padding: "10px 14px" }}>
+                      <button onClick={() => enrollStudent(s.id)}
+                        style={{ padding: "4px 12px", borderRadius: 6, border: "1.5px solid #82e0aa", background: "#eafaf1", color: "#1e8449", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                        Enroll
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {notEnrolled.length === 0 && <tr><td colSpan={3} style={{ textAlign: "center", padding: 30, color: "#a0aec0" }}>All students enrolled</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LecturersAdmin() {
+  const [lecturers, setLecturers] = useState([]);
+
+  const load = () => axios.get(`${API}/lecturers`).then(r => setLecturers(r.data)).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const toggleActive = (id, current) => {
+    if (!window.confirm(`${current ? "Deactivate" : "Activate"} this lecturer?`)) return;
+    axios.delete(`${API}/lecturers/${id}`).then(() => load());
+  };
+
+  return (
+    <div>
+      <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 8px #0000000d" }}>
+        <div style={{ padding: "14px 18px", background: "#f0f4f8", borderBottom: "1px solid #e2e8f0", fontWeight: 800, fontSize: 15 }}>
+          👨‍🏫 Registered Lecturers ({lecturers.length})
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#f8fafc" }}>
+              {["Staff No", "Full Name", "Email", "School", "Role", "Status", "Action"].map(h => (
+                <th key={h} style={{ padding: "11px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#718096", textTransform: "uppercase" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {lecturers.map((l, i) => (
+              <tr key={l.id} style={{ borderTop: "1px solid #f0f4f8", background: i % 2 === 0 ? "white" : "#fafbff" }}>
+                <td style={{ padding: "11px 16px", fontFamily: "monospace", color: "#0a3d62", fontWeight: 700, fontSize: 13 }}>{l.staff_no || "—"}</td>
+                <td style={{ padding: "11px 16px", fontWeight: 600 }}>{l.full_name}</td>
+                <td style={{ padding: "11px 16px", fontSize: 13, color: "#718096" }}>{l.email}</td>
+                <td style={{ padding: "11px 16px", fontSize: 12, color: "#718096" }}>{l.department_name}</td>
+                <td style={{ padding: "11px 16px" }}>
+                  <span style={{ background: l.role === "admin" ? "#fff8e1" : "#eaf4fb", color: l.role === "admin" ? "#f39c12" : "#1a6b8a", borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
+                    {l.role === "admin" ? "👑 Admin" : "👨‍🏫 Lecturer"}
+                  </span>
+                </td>
+                <td style={{ padding: "11px 16px" }}>
+                  <span style={{ background: l.is_active ? "#eafaf1" : "#fdf2f2", color: l.is_active ? "#1e8449" : "#c0392b", borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
+                    {l.is_active ? "Active" : "Inactive"}
+                  </span>
+                </td>
+                <td style={{ padding: "11px 16px" }}>
+                  <button onClick={() => toggleActive(l.id, l.is_active)}
+                    style={{ padding: "5px 14px", borderRadius: 6, border: `1.5px solid ${l.is_active ? "#f1948a" : "#82e0aa"}`, background: l.is_active ? "#fdf2f2" : "#eafaf1", color: l.is_active ? "#c0392b" : "#1e8449", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    {l.is_active ? "Deactivate" : "Activate"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {lecturers.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", padding: 50, color: "#a0aec0" }}>No lecturers registered yet</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function Settings({ user }) {
+  const [form, setForm] = useState({ old_password: "", new_password: "", confirm_password: "" });
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = async () => {
+    if (!form.old_password || !form.new_password) return setError("All fields are required.");
+    if (form.new_password !== form.confirm_password) return setError("New passwords do not match.");
+    if (form.new_password.length < 6) return setError("Password must be at least 6 characters.");
+    setLoading(true); setError(""); setMsg("");
+    try {
+      await axios.post(`${API}/auth/change-password`, { id: user.id, role: user.role, old_password: form.old_password, new_password: form.new_password });
+      setMsg("✅ Password changed successfully!");
+      setForm({ old_password: "", new_password: "", confirm_password: "" });
+    } catch(e) {
+      setError(e.response?.data?.error || "Failed to change password.");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ maxWidth: 500 }}>
+      <div style={{ background: "white", borderRadius: 14, padding: 28, boxShadow: "0 2px 8px #0000000d" }}>
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6, color: "#1a202c" }}>⚙️ Account Settings</div>
+        <div style={{ fontSize: 13, color: "#718096", marginBottom: 24 }}>Logged in as <strong>{user.full_name}</strong> ({user.role})</div>
+
+        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 16, color: "#1a202c" }}>🔒 Change Password</div>
+
+        {error && <div style={{ background: "#fdf2f2", border: "1px solid #f1948a", borderRadius: 8, padding: "10px 14px", color: "#c0392b", fontSize: 13, marginBottom: 16, fontWeight: 600 }}>{error}</div>}
+        {msg && <div style={{ background: "#eafaf1", border: "1px solid #82e0aa", borderRadius: 8, padding: "10px 14px", color: "#1e8449", fontSize: 13, marginBottom: 16, fontWeight: 600 }}>{msg}</div>}
+
+        {[
+          { label: "CURRENT PASSWORD", key: "old_password", placeholder: "Enter current password" },
+          { label: "NEW PASSWORD", key: "new_password", placeholder: "Min 6 characters" },
+          { label: "CONFIRM NEW PASSWORD", key: "confirm_password", placeholder: "Re-enter new password" },
+        ].map(f => (
+          <div key={f.key} style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>{f.label}</label>
+            <input type="password" placeholder={f.placeholder} value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+              style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+          </div>
+        ))}
+
+        <button onClick={handleChange} disabled={loading}
+          style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: loading ? "#a0aec0" : "#0a3d62", color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
+          {loading ? "Changing..." : "Change Password"}
+        </button>
+      </div>
     </div>
   );
 }
