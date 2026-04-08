@@ -118,8 +118,7 @@ function App() {
     const saved = sessionStorage.getItem('pu_user');
     return saved ? JSON.parse(saved) : null;
   });
-
-  const handleLogin = (userData) => {
+const handleLogin = (userData) => {
     sessionStorage.setItem('pu_user', JSON.stringify(userData));
     setUser(userData);
   };
@@ -157,19 +156,23 @@ function Dashboard({ user, onLogout }) {
 
 const navItems = [
     { id: "overview", label: "Dashboard", icon: "🏠" },
-    { id: "students", label: "Students", icon: "🎓" },
-    { id: "courses", label: "Courses", icon: "📚" },
+    ...(isAdmin ? [
+      { id: "students", label: "Students", icon: "🎓" },
+      { id: "courses", label: "Courses", icon: "📚" },
+    ] : []),
     { id: "attendance", label: "Attendance", icon: "📋" },
     { id: "assignments", label: "Assessments", icon: "📝" },
     { id: "insights", label: "Insights", icon: "💡" },
     ...(isAdmin ? [
       { id: "enrollments", label: "Enrollments", icon: "🔗" },
       { id: "lecturers", label: "Lecturers", icon: "👨‍🏫" },
-      { id: "settings", label: "Settings", icon: "⚙️" },
+      { id: "charts", label: "Charts", icon: "📈" },
+      { id: "reports", label: "Reports", icon: "📄" },
     ] : []),
+    { id: "settings", label: "Settings", icon: "⚙️" },
   ];
 
-  const pageTitle = { overview: "Dashboard", students: "Students", courses: "Courses", attendance: "Attendance", assignments: "Assessments", insights: "Insights", enrollments: "Student Enrollments", lecturers: "Manage Lecturers", settings: "Settings" };
+ const pageTitle = { overview: "Dashboard", students: "Students", courses: "Courses", attendance: "Attendance", assignments: "Assessments", insights: "Insights", enrollments: "Student Enrollments", lecturers: "Manage Lecturers", settings: "Settings", charts: "Analytics Charts", reports: "Reports & Exports" };
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", fontFamily: "'Segoe UI', Arial, sans-serif", background: "#f0f4f8" }}>
@@ -226,20 +229,23 @@ const navItems = [
 
         {/* Content */}
         <div style={{ flex: 1, padding: 24, overflowY: "auto" }}>
-          {page === "overview" && <Overview overview={overview} setPage={setPage} students={students} courses={courses} />}
+          {page === "overview" && <Overview overview={overview} setPage={setPage} students={students} courses={isLecturer ? (user.courses || []) : courses} user={user} isAdmin={isAdmin} />}
           {page === "students" && <Students students={students} departments={departments} onRefresh={loadStudents} />}
           {page === "courses" && <Courses courses={courses} departments={departments} onRefresh={loadCourses} />}
-          {page === "attendance" && <Attendance courses={courses} />}
-          {page === "assignments" && <Assignments courses={courses} />}
+          {page === "attendance" && <Attendance courses={isLecturer ? (user.courses || []) : courses} />}
+          {page === "assignments" && <Assignments courses={isLecturer ? (user.courses || []) : courses} />}
           {page === "insights" && <Insights students={students} />}
           {page === "enrollments" && isAdmin && <Enrollments students={students} courses={courses} />}
           {page === "lecturers" && isAdmin && <LecturersAdmin />}
           {page === "settings" && <Settings user={user} />}
+          {page === "charts" && isAdmin && <Charts students={students} courses={courses} overview={overview} />}
+          {page === "reports" && isAdmin && <Reports students={students} courses={courses} />}
         </div>
       </div>
     </div>
   );
-}function LoginPage({ onLogin }) {
+}
+function LoginPage({ onLogin }) {
   const [mode, setMode] = useState("admin");
   const [tab, setTab] = useState("login");
   const [form, setForm] = useState({ email: "", password: "" });
@@ -257,7 +263,7 @@ const navItems = [
     if (!form.email || !form.password) return setError("Email and password are required.");
     setLoading(true); setError("");
     try {
-      const r = await axios.post(`${API}/auth/login`, form);
+      const r = await axios.post(`${API}/auth/login`, { ...form, role: mode });
       if (r.data.success) onLogin(r.data);
       else setError(r.data.error || "Invalid credentials.");
     } catch (e) {
@@ -267,7 +273,7 @@ const navItems = [
   };
 
   const handleRegister = async () => {
-    if (!regForm.full_name || !regForm.email || !regForm.password) return setError("All fields are required.");
+    if (!regForm.staff_no || !regForm.full_name || !regForm.email || !regForm.password) return setError("All fields are required.");
     if (regForm.password !== regForm.confirm_password) return setError("Passwords do not match.");
     if (regForm.password.length < 6) return setError("Password must be at least 6 characters.");
     setLoading(true); setError(""); setSuccess("");
@@ -276,9 +282,24 @@ const navItems = [
       setSuccess("✅ Registration successful! You can now log in.");
       setTab("login");
       setForm({ email: regForm.email, password: "" });
-      setRegForm({ full_name: "", email: "", password: "", confirm_password: "", department_id: "1" });
+      setRegForm({ staff_no: "", full_name: "", email: "", password: "", confirm_password: "", department_id: "1" });
     } catch (e) {
       setError(e.response?.data?.error || "Registration failed.");
+    }
+    setLoading(false);
+  };
+
+  const handleForgot = async () => {
+    if (!form.email || !form.password) return setError("Email and new password are required.");
+    if (form.password.length < 6) return setError("Password must be at least 6 characters.");
+    setLoading(true); setError("");
+    try {
+      await axios.post(`${API}/auth/forgot-password`, { email: form.email, new_password: form.password });
+      setSuccess("✅ Password reset successfully! You can now login.");
+      setTab("login");
+      setForm({ email: form.email, password: "" });
+    } catch(e) {
+      setError(e.response?.data?.error || "Reset failed. Email not found.");
     }
     setLoading(false);
   };
@@ -286,14 +307,12 @@ const navItems = [
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0a3d62 0%, #1a5276 50%, #148f77 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Segoe UI, sans-serif" }}>
       <div style={{ width: "100%", maxWidth: 460, padding: 24 }}>
-        {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <div style={{ width: 70, height: 70, borderRadius: 20, background: "#f39c12", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 900, color: "white", margin: "0 auto 14px" }}>PU</div>
           <div style={{ fontSize: 24, fontWeight: 900, color: "white" }}>Pwani University</div>
           <div style={{ fontSize: 13, color: "#a9c8e8", marginTop: 4 }}>Performance Analytics System</div>
         </div>
 
-        {/* Mode selector */}
         <div style={{ display: "flex", gap: 10, marginBottom: 16, justifyContent: "center" }}>
           {[
             { id: "admin", label: "👑 Admin", color: "#f39c12" },
@@ -306,9 +325,8 @@ const navItems = [
           ))}
         </div>
 
-        {/* Card */}
         <div style={{ background: "white", borderRadius: 20, padding: 32, boxShadow: "0 20px 60px #00000033" }}>
-          {mode === "lecturer" && (
+          {mode === "lecturer" && tab !== "forgot" && (
             <div style={{ display: "flex", marginBottom: 24, background: "#f0f4f8", borderRadius: 10, padding: 4 }}>
               {[{ id: "login", label: "Login" }, { id: "register", label: "Register" }].map(t => (
                 <button key={t.id} onClick={() => { setTab(t.id); setError(""); setSuccess(""); }}
@@ -321,53 +339,17 @@ const navItems = [
 
           <div style={{ textAlign: "center", marginBottom: 20 }}>
             <div style={{ fontSize: 18, fontWeight: 800, color: "#1a202c" }}>
-              {mode === "admin" ? "Admin Login" : tab === "login" ? "Lecturer Login" : "Lecturer Registration"}
+              {tab === "forgot" ? "Reset Password" : mode === "admin" ? "Admin Login" : tab === "login" ? "Lecturer Login" : "Lecturer Registration"}
             </div>
             <div style={{ fontSize: 12, color: "#a0aec0", marginTop: 4 }}>
-              {mode === "admin" ? "Sign in with your administrator credentials" : tab === "login" ? "Sign in to your lecturer account" : "Create a new lecturer account"}
+              {tab === "forgot" ? "Enter your email and new password" : mode === "admin" ? "Sign in with your administrator credentials" : tab === "login" ? "Sign in to your lecturer account" : "Create a new lecturer account"}
             </div>
           </div>
 
           {error && <div style={{ background: "#fdf2f2", border: "1px solid #f1948a", borderRadius: 8, padding: "10px 14px", color: "#c0392b", fontSize: 13, marginBottom: 16, fontWeight: 600 }}>{error}</div>}
           {success && <div style={{ background: "#eafaf1", border: "1px solid #82e0aa", borderRadius: 8, padding: "10px 14px", color: "#1e8449", fontSize: 13, marginBottom: 16, fontWeight: 600 }}>{success}</div>}
-{tab === "forgot" && (
-            <div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>EMAIL ADDRESS</label>
-                <input type="email" placeholder="Enter your registered email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
-              </div>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>NEW PASSWORD</label>
-                <input type="password" placeholder="Min 6 characters" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
-                  style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
-              </div>
-              <button onClick={async () => {
-                if (!form.email || !form.password) return setError("Email and new password are required.");
-                if (form.password.length < 6) return setError("Password must be at least 6 characters.");
-                setLoading(true); setError("");
-                try {
-                  await axios.post(`${API}/auth/forgot-password`, { email: form.email, new_password: form.password });
-                  setSuccess("✅ Password reset successfully! You can now login.");
-                  setTab("login");
-                  setForm({ email: form.email, password: "" });
-                } catch(e) {
-                  setError(e.response?.data?.error || "Reset failed. Email not found.");
-                }
-                setLoading(false);
-              }} disabled={loading}
-                style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: loading ? "#a0aec0" : "#7d3c98", color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
-                {loading ? "Resetting..." : "Reset Password →"}
-              </button>
-              <div style={{ textAlign: "center", marginTop: 14 }}>
-                <button onClick={() => { setTab("login"); setError(""); }}
-                  style={{ background: "none", border: "none", color: "#0a3d62", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
-                  ← Back to Login
-                </button>
-              </div>
-            </div>
-          )}
-          {(mode === "admin" || tab === "login") && (
+
+          {tab === "login" && (
             <div>
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 12, fontWeight: 700, color: "#718096", display: "block", marginBottom: 6 }}>EMAIL ADDRESS</label>
@@ -386,13 +368,14 @@ const navItems = [
                 {loading ? "Signing in..." : "Login →"}
               </button>
               <div style={{ textAlign: "center", marginTop: 14 }}>
-                <button onClick={() => { setTab("forgot"); setError(""); }}
+                <button onClick={() => { setTab("forgot"); setError(""); setForm({ email: "", password: "" }); }}
                   style={{ background: "none", border: "none", color: "#0a3d62", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
                   Forgot Password?
                 </button>
               </div>
             </div>
           )}
+
           {tab === "forgot" && (
             <div>
               <div style={{ marginBottom: 16 }}>
@@ -405,25 +388,12 @@ const navItems = [
                 <input type="password" placeholder="Min 6 characters" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
                   style={{ width: "100%", padding: "11px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
               </div>
-              <button onClick={async () => {
-                if (!form.email || !form.password) return setError("Email and new password are required.");
-                if (form.password.length < 6) return setError("Password must be at least 6 characters.");
-                setLoading(true); setError("");
-                try {
-                  await axios.post(`${API}/auth/forgot-password`, { email: form.email, new_password: form.password });
-                  setSuccess("✅ Password reset successfully! You can now login.");
-                  setTab("login");
-                  setForm({ email: form.email, password: "" });
-                } catch(e) {
-                  setError(e.response?.data?.error || "Reset failed. Email not found.");
-                }
-                setLoading(false);
-              }} disabled={loading}
+              <button onClick={handleForgot} disabled={loading}
                 style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: loading ? "#a0aec0" : "#7d3c98", color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
                 {loading ? "Resetting..." : "Reset Password →"}
               </button>
               <div style={{ textAlign: "center", marginTop: 14 }}>
-                <button onClick={() => { setTab("login"); setError(""); }}
+                <button onClick={() => { setTab("login"); setError(""); setForm({ email: "", password: "" }); }}
                   style={{ background: "none", border: "none", color: "#0a3d62", fontSize: 13, cursor: "pointer", textDecoration: "underline" }}>
                   ← Back to Login
                 </button>
@@ -431,11 +401,11 @@ const navItems = [
             </div>
           )}
 
-          {mode === "lecturer" && tab === "register" && (
+          {tab === "register" && mode === "lecturer" && (
             <div>
               {[
                 { label: "STAFF NUMBER *", key: "staff_no", placeholder: "e.g. PU/STAFF/001", type: "text" },
-              { label: "FULL NAME *", key: "full_name", placeholder: "e.g. Dr. John Mwangi", type: "text" },
+                { label: "FULL NAME *", key: "full_name", placeholder: "e.g. Dr. John Mwangi", type: "text" },
                 { label: "EMAIL ADDRESS *", key: "email", placeholder: "e.g. john@pu.ac.ke", type: "email" },
                 { label: "PASSWORD *", key: "password", placeholder: "Min 6 characters", type: "password" },
                 { label: "CONFIRM PASSWORD *", key: "confirm_password", placeholder: "Re-enter password", type: "password" },
@@ -467,7 +437,6 @@ const navItems = [
     </div>
   );
 }
-// end Dashboard
 
 function StatCard({ label, value, icon, color, onClick, subtitle }) {
   const [hovered, setHovered] = useState(false);
@@ -485,211 +454,118 @@ function StatCard({ label, value, icon, color, onClick, subtitle }) {
   );
 }
 
-function Overview({ overview, setPage, students, courses }) {
-  const atRisk = students.filter(s => (s.avg_attendance || 0) < 75).length;
-  return (
-    <div>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 22, fontWeight: 800, color: "#1a202c", marginBottom: 4 }}>Welcome to Pwani University Analytics</div>
-        <div style={{ fontSize: 14, color: "#718096" }}>Monitor student performance, attendance, and academic progress in real time.</div>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
-        <StatCard label="Total Students" value={overview?.total_students || 0} icon="🎓" color="#0a3d62" onClick={() => setPage("students")} subtitle="Click to view all" />
-        <StatCard label="Total Courses" value={overview?.total_courses || 0} icon="📚" color="#148f77" onClick={() => setPage("courses")} subtitle="Click to manage" />
-        <StatCard label="At Risk Students" value={overview?.at_risk_attendance || 0} icon="⚠️" color="#c0392b" onClick={() => setPage("insights")} subtitle="Below 75% attendance" />
-        <StatCard label="Avg Attendance" value={`${overview?.avg_attendance || 0}%`} icon="📊" color="#d35400" onClick={() => setPage("attendance")} subtitle={overview?.avg_attendance >= 75 ? "✅ Above threshold" : "⚠️ Below threshold"} />
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
-        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 2px 8px #0000000d" }}>
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14, color: "#1a202c" }}>📌 Academic Policy</div>
-          <div style={{ background: "#fff8e1", border: "1px solid #f9ca5a", borderRadius: 10, padding: 14, fontSize: 13, marginBottom: 10 }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Attendance Requirement</div>
-            Students must attend minimum <strong>75%</strong> of all sessions to sit for end-semester exams.
-          </div>
-          <div style={{ background: "#eaf4fb", border: "1px solid #85c1e9", borderRadius: 10, padding: 14, fontSize: 13 }}>
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Grade Calculation</div>
-            <strong>30%</strong> CATs & Assignments + <strong>70%</strong> End Semester Exam = Final Grade
-          </div>
-        </div>
-
-        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 2px 8px #0000000d" }}>
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14, color: "#1a202c" }}>🏫 Schools at Pwani University</div>
-          {[
-            { name: "School of Pure & Applied Sciences", icon: "🔬", color: "#0a3d62" },
-            { name: "School of Education", icon: "📖", color: "#148f77" },
-            { name: "School of Humanities & Social Sciences", icon: "🌍", color: "#7d3c98" },
-            { name: "School of Agriculture & Environmental Sciences", icon: "🌱", color: "#1e8449" },
-          ].map((s, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < 3 ? "1px solid #f0f4f8" : "none" }}>
-              <span style={{ fontSize: 18 }}>{s.icon}</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: s.color }}>{s.name}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 2px 8px #0000000d" }}>
-        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14, color: "#1a202c" }}>📊 Quick Summary</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
-          {[
-            { label: "Active Students", value: students.length, color: "#0a3d62" },
-            { label: "Registered Courses", value: courses.length, color: "#148f77" },
-            { label: "Needing Intervention", value: overview?.at_risk_attendance || 0, color: "#c0392b" },
-          ].map((s, i) => (
-            <div key={i} style={{ background: "#f8fafc", borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
-              <div style={{ fontSize: 26, fontWeight: 900, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: 12, color: "#718096", marginTop: 4 }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-function Students({ students, departments, onRefresh }) {
-  const [search, setSearch] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
-  const [filterDept, setFilterDept] = useState("");
-  const [form, setForm] = useState({ reg_no: "", full_name: "", email: "", phone: "", department_id: "1", year_of_study: "1", semester: "1", program: "" });
-
-  const filtered = students.filter(s =>
-    (s.full_name.toLowerCase().includes(search.toLowerCase()) || s.reg_no.toLowerCase().includes(search.toLowerCase())) &&
-    (filterDept === "" || s.department_id == filterDept)
-  );
-
-  const handleAdd = () => {
-    if (!form.reg_no || !form.full_name) return alert("Reg No and Full Name are required.");
-    axios.post(`${API}/students`, form)
-      .then(() => { setShowAdd(false); setForm({ reg_no: "", full_name: "", email: "", phone: "", department_id: "1", year_of_study: "1", semester: "1", program: "" }); onRefresh(); })
-      .catch(e => alert("Error: " + (e.response?.data?.error || e.message)));
-  };
-
-  const handleDelete = (id, name) => {
-    if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return;
-    axios.delete(`${API}/students/${id}`)
-      .then(() => onRefresh())
-      .catch(() => alert("Could not delete student."));
-  };
+function Overview({ overview, setPage, students, courses, user, isAdmin }) {
+  const cards = isAdmin ? [
+    { label: "Total Students", value: overview?.total_students || 0, icon: "🎓", color: "#0a3d62", onClick: () => setPage("students"), subtitle: "Click to view all" },
+    { label: "Total Courses", value: overview?.total_courses || 0, icon: "📚", color: "#148f77", onClick: () => setPage("courses"), subtitle: "Click to manage" },
+    { label: "At Risk Students", value: overview?.at_risk_attendance || 0, icon: "⚠️", color: "#c0392b", onClick: () => setPage("insights"), subtitle: "Below 75% attendance" },
+    { label: "Avg Attendance", value: `${overview?.avg_attendance || 0}%`, icon: "📊", color: "#d35400", onClick: () => setPage("attendance"), subtitle: overview?.avg_attendance >= 75 ? "✅ Above threshold" : "⚠️ Below threshold" },
+  ] : [
+    { label: "My Courses", value: courses.length, icon: "📚", color: "#148f77", onClick: () => setPage("attendance"), subtitle: "Click to take attendance" },
+    { label: "At Risk Students", value: overview?.at_risk_attendance || 0, icon: "⚠️", color: "#c0392b", onClick: () => setPage("insights"), subtitle: "Below 75% attendance" },
+    { label: "Avg Attendance", value: `${overview?.avg_attendance || 0}%`, icon: "📊", color: "#d35400", onClick: () => setPage("attendance"), subtitle: overview?.avg_attendance >= 75 ? "✅ Above threshold" : "⚠️ Below threshold" },
+  ];
 
   return (
     <div>
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search by name or reg no..."
-          style={{ flex: 1, minWidth: 200, padding: "10px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14 }} />
-        <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
-          style={{ padding: "10px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, minWidth: 200 }}>
-          <option value="">All Schools</option>
-          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-        <button onClick={() => setShowAdd(!showAdd)}
-          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: "#0a3d62", color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
-          + Add Student
-        </button>
-      </div>
-
-      {showAdd && (
-        <div style={{ background: "white", borderRadius: 14, padding: 24, marginBottom: 16, boxShadow: "0 4px 16px #0000001a", border: "1px solid #e2e8f0" }}>
-          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, color: "#1a202c" }}>➕ Add New Student</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>REG NO *</label>
-              <input placeholder="e.g. S/CS/009/2024" value={form.reg_no} onChange={e => setForm({ ...form, reg_no: e.target.value })}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>FULL NAME *</label>
-              <input placeholder="e.g. John Doe Mwangi" value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>EMAIL</label>
-              <input placeholder="e.g. john@students.pu.ac.ke" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>PHONE</label>
-              <input placeholder="e.g. 0712345678" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>SCHOOL</label>
-              <select value={form.department_id} onChange={e => setForm({ ...form, department_id: e.target.value })}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
-                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            </div>
-           <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>PROGRAMME</label>
-              <select value={form.program} onChange={e => setForm({ ...form, program: e.target.value })}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
-                <option value="">Select Programme</option>
-                {(PWANI_PROGRAMS_BY_SCHOOL[departments.find(d => d.id == form.department_id)?.name] || []).map((p, i) => (
-                  <option key={i} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>YEAR OF STUDY</label>
-              <select value={form.year_of_study} onChange={e => setForm({ ...form, year_of_study: e.target.value })}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
-                {[1,2,3,4].map(y => <option key={y} value={y}>Year {y}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>SEMESTER</label>
-              <select value={form.semester} onChange={e => setForm({ ...form, semester: e.target.value })}
-                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
-                <option value="1">Semester 1</option>
-                <option value="2">Semester 2</option>
-              </select>
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            <button onClick={handleAdd} style={{ padding: "10px 28px", borderRadius: 8, border: "none", background: "#0a3d62", color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>Save Student</button>
-            <button onClick={() => setShowAdd(false)} style={{ padding: "10px 28px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "white", fontWeight: 600, cursor: "pointer", fontSize: 14 }}>Cancel</button>
+      {!isAdmin && (
+        <div style={{ background: "linear-gradient(135deg, #0a3d62, #148f77)", borderRadius: 14, padding: "20px 24px", marginBottom: 24, color: "white" }}>
+          <div style={{ fontSize: 20, fontWeight: 900 }}>Welcome, {user?.full_name} 👋</div>
+          <div style={{ fontSize: 13, marginTop: 4, opacity: 0.85 }}>Staff No: {user?.staff_no} — Pwani University Lecturer</div>
+          <div style={{ marginTop: 12, fontSize: 13, opacity: 0.9 }}>
+            You have <strong>{courses.length}</strong> assigned course{courses.length !== 1 ? "s" : ""}.
+            Use the sidebar to record attendance and enter assessment scores.
           </div>
         </div>
       )}
 
-      <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 8px #0000000d" }}>
-        <div style={{ padding: "12px 16px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 13, color: "#718096", fontWeight: 600 }}>
-          Showing {filtered.length} of {students.length} students
-        </div>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ background: "#f0f4f8" }}>
-              {["Reg No", "Full Name", "School", "Programme", "Year", "Status", "Action"].map(h => (
-                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#718096", textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((s, i) => (
-              <tr key={s.id} style={{ borderTop: "1px solid #f0f4f8", background: i % 2 === 0 ? "white" : "#fafbff" }}>
-                <td style={{ padding: "12px 16px", fontSize: 13, fontFamily: "monospace", color: "#0a3d62", fontWeight: 700 }}>{s.reg_no}</td>
-                <td style={{ padding: "12px 16px", fontWeight: 600, color: "#1a202c" }}>{s.full_name}</td>
-                <td style={{ padding: "12px 16px", fontSize: 12, color: "#718096" }}>{s.department_name}</td>
-                <td style={{ padding: "12px 16px", fontSize: 12, color: "#718096" }}>{s.program || "—"}</td>
-                <td style={{ padding: "12px 16px", fontSize: 13 }}>Year {s.year_of_study}</td>
-                <td style={{ padding: "12px 16px" }}>
-                  <span style={{ background: "#eafaf1", color: "#1e8449", border: "1px solid #82e0aa", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>{s.status}</span>
-                </td>
-                <td style={{ padding: "12px 16px" }}>
-                  <button onClick={() => handleDelete(s.id, s.full_name)}
-                    style={{ padding: "5px 14px", borderRadius: 6, border: "1.5px solid #f1948a", background: "#fdf2f2", color: "#c0392b", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                    🗑 Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={7} style={{ textAlign: "center", padding: 50, color: "#a0aec0", fontSize: 14 }}>No students found</td></tr>
-            )}
-          </tbody>
-        </table>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cards.length}, 1fr)`, gap: 16, marginBottom: 24 }}>
+        {cards.map((c, i) => (
+          <StatCard key={i} label={c.label} value={c.value} icon={c.icon} color={c.color} onClick={c.onClick} subtitle={c.subtitle} />
+        ))}
       </div>
+
+      {isAdmin && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+          <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 2px 8px #0000000d" }}>
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14, color: "#1a202c" }}>📌 Academic Policy</div>
+            <div style={{ background: "#fff8e1", border: "1px solid #f9ca5a", borderRadius: 10, padding: 14, fontSize: 13, marginBottom: 10 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Attendance Requirement</div>
+              Students must attend minimum <strong>75%</strong> of all sessions to sit for end-semester exams.
+            </div>
+            <div style={{ background: "#eaf4fb", border: "1px solid #85c1e9", borderRadius: 10, padding: 14, fontSize: 13 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Grade Calculation</div>
+              <strong>30%</strong> CATs & Assignments + <strong>70%</strong> End Semester Exam = Final Grade
+            </div>
+          </div>
+          <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 2px 8px #0000000d" }}>
+            <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14, color: "#1a202c" }}>🏫 Schools at Pwani University</div>
+            {[
+              { name: "School of Pure & Applied Sciences", icon: "🔬", color: "#0a3d62" },
+              { name: "School of Education", icon: "📖", color: "#148f77" },
+              { name: "School of Humanities & Social Sciences", icon: "🌍", color: "#7d3c98" },
+              { name: "School of Agriculture & Environmental Sciences", icon: "🌱", color: "#1e8449" },
+            ].map((s, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: i < 3 ? "1px solid #f0f4f8" : "none" }}>
+                <span style={{ fontSize: 18 }}>{s.icon}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: s.color }}>{s.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isAdmin && courses.length > 0 && (
+        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 2px 8px #0000000d" }}>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14, color: "#1a202c" }}>📚 My Assigned Courses</div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#f0f4f8" }}>
+                {["Code", "Course Name", "Department", "Year", "Credits"].map(h => (
+                  <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#718096", textTransform: "uppercase" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {courses.map((c, i) => (
+                <tr key={c.id} style={{ borderTop: "1px solid #f0f4f8" }}>
+                  <td style={{ padding: "10px 14px", fontFamily: "monospace", color: "#0a3d62", fontWeight: 800 }}>{c.code}</td>
+                  <td style={{ padding: "10px 14px", fontWeight: 600 }}>{c.name}</td>
+                  <td style={{ padding: "10px 14px", fontSize: 13, color: "#718096" }}>{c.department_name}</td>
+                  <td style={{ padding: "10px 14px", fontSize: 13 }}>Year {c.year_of_study}</td>
+                  <td style={{ padding: "10px 14px", fontSize: 13 }}>{c.credits}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {!isAdmin && courses.length === 0 && (
+        <div style={{ background: "white", borderRadius: 14, padding: 40, textAlign: "center", boxShadow: "0 2px 8px #0000000d" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: "#1a202c" }}>No courses assigned yet</div>
+          <div style={{ fontSize: 13, color: "#718096", marginTop: 8 }}>Contact the administrator to assign courses to your account.</div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <div style={{ background: "white", borderRadius: 14, padding: 20, boxShadow: "0 2px 8px #0000000d" }}>
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 14, color: "#1a202c" }}>📊 Quick Summary</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+            {[
+              { label: "Active Students", value: students.length, color: "#0a3d62" },
+              { label: "Registered Courses", value: courses.length, color: "#148f77" },
+              { label: "Needing Intervention", value: overview?.at_risk_attendance || 0, color: "#c0392b" },
+            ].map((s, i) => (
+              <div key={i} style={{ background: "#f8fafc", borderRadius: 10, padding: "14px 16px", textAlign: "center" }}>
+                <div style={{ fontSize: 26, fontWeight: 900, color: s.color }}>{s.value}</div>
+                <div style={{ fontSize: 12, color: "#718096", marginTop: 4 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1485,6 +1361,220 @@ function Settings({ user }) {
           style={{ width: "100%", padding: "12px 0", borderRadius: 10, border: "none", background: loading ? "#a0aec0" : "#0a3d62", color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer" }}>
           {loading ? "Changing..." : "Change Password"}
         </button>
+      </div>
+    </div>
+  );
+}
+function Charts({ students, courses, overview }) {
+  const [atRisk, setAtRisk] = useState({ attendance_risk: [], performance_risk: [] });
+
+  useEffect(() => {
+    axios.get(`${API}/analytics/at-risk`).then(r => setAtRisk(r.data)).catch(() => {});
+  }, []);
+
+  const attendanceData = [
+    { label: "At Risk (<75%)", value: atRisk.attendance_risk.length, color: "#c0392b" },
+    { label: "Healthy (≥75%)", value: Math.max(0, students.length - atRisk.attendance_risk.length), color: "#1e8449" },
+  ];
+
+  const performanceData = [
+    { label: "Failing (<40%)", value: atRisk.performance_risk.filter(s => s.performance_status === "failing").length, color: "#c0392b" },
+    { label: "At Risk (<50%)", value: atRisk.performance_risk.filter(s => s.performance_status === "at_risk").length, color: "#e67e22" },
+    { label: "Passing (≥50%)", value: Math.max(0, students.length - atRisk.performance_risk.length), color: "#1e8449" },
+  ];
+
+  const Bar = ({ data, title }) => {
+    const max = Math.max(...data.map(d => d.value), 1);
+    return (
+      <div style={{ background: "white", borderRadius: 14, padding: 24, boxShadow: "0 2px 8px #0000000d" }}>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 20, color: "#1a202c" }}>{title}</div>
+        {data.map((d, i) => (
+          <div key={i} style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#4a5568" }}>{d.label}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: d.color }}>{d.value}</span>
+            </div>
+            <div style={{ height: 10, background: "#f0f4f8", borderRadius: 5 }}>
+              <div style={{ width: `${(d.value / max) * 100}%`, height: "100%", background: d.color, borderRadius: 5, transition: "width 0.6s ease" }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const DonutChart = ({ data, title }) => {
+    const total = data.reduce((a, b) => a + b.value, 0) || 1;
+    let cumulative = 0;
+    const radius = 60;
+    const cx = 80, cy = 80;
+    const segments = data.map(d => {
+      const pct = d.value / total;
+      const start = cumulative;
+      cumulative += pct;
+      const startAngle = start * 2 * Math.PI - Math.PI / 2;
+      const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
+      const x1 = cx + radius * Math.cos(startAngle);
+      const y1 = cy + radius * Math.sin(startAngle);
+      const x2 = cx + radius * Math.cos(endAngle);
+      const y2 = cy + radius * Math.sin(endAngle);
+      const largeArc = pct > 0.5 ? 1 : 0;
+      return { ...d, path: `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`, pct: Math.round(pct * 100) };
+    });
+
+    return (
+      <div style={{ background: "white", borderRadius: 14, padding: 24, boxShadow: "0 2px 8px #0000000d" }}>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 20, color: "#1a202c" }}>{title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+          <svg width="160" height="160" viewBox="0 0 160 160">
+            {segments.map((s, i) => (
+              <path key={i} d={s.path} fill={s.color} opacity={0.9} />
+            ))}
+            <circle cx={cx} cy={cy} r={35} fill="white" />
+            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="14" fontWeight="800" fill="#1a202c">{total}</text>
+            <text x={cx} y={cy + 14} textAnchor="middle" dominantBaseline="middle" fontSize="9" fill="#718096">students</text>
+          </svg>
+          <div>
+            {segments.map((s, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: s.color }} />
+                <span style={{ fontSize: 13, color: "#4a5568" }}>{s.label}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: s.color, marginLeft: 4 }}>{s.pct}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 24 }}>
+        {[
+          { label: "Total Students", value: students.length, color: "#0a3d62", icon: "🎓" },
+          { label: "Total Courses", value: courses.length, color: "#148f77", icon: "📚" },
+          { label: "Attendance Risk", value: atRisk.attendance_risk.length, color: "#c0392b", icon: "⚠️" },
+          { label: "Performance Risk", value: atRisk.performance_risk.length, color: "#e67e22", icon: "📉" },
+        ].map((c, i) => (
+          <div key={i} style={{ background: "white", borderRadius: 14, padding: "18px 20px", boxShadow: "0 2px 8px #0000000d", display: "flex", gap: 14, alignItems: "center" }}>
+            <span style={{ fontSize: 28 }}>{c.icon}</span>
+            <div>
+              <div style={{ fontSize: 26, fontWeight: 900, color: c.color }}>{c.value}</div>
+              <div style={{ fontSize: 12, color: "#718096" }}>{c.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+        <DonutChart data={attendanceData} title="📋 Attendance Distribution" />
+        <DonutChart data={performanceData} title="📊 Performance Distribution" />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Bar data={attendanceData} title="📋 Attendance Risk Breakdown" />
+        <Bar data={performanceData} title="📊 Performance Risk Breakdown" />
+      </div>
+    </div>
+  );
+}
+
+function Reports({ students, courses }) {
+  const [atRisk, setAtRisk] = useState({ attendance_risk: [], performance_risk: [] });
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    axios.get(`${API}/analytics/at-risk`).then(r => setAtRisk(r.data)).catch(() => {});
+  }, []);
+
+  const exportCSV = (data, filename, headers) => {
+    const rows = [headers.join(","), ...data.map(r => headers.map(h => {
+      const key = h.toLowerCase().replace(/ /g, "_");
+      const val = r[key] || r[Object.keys(r).find(k => k.toLowerCase().includes(key.split("_")[0]))] || "";
+      return `"${val}"`;
+    }).join(","))];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = filename; a.click();
+    setMsg(`✅ ${filename} downloaded!`);
+  };
+
+  const exportStudentsCSV = () => {
+    const headers = ["Reg No", "Full Name", "Department", "Year", "Status"];
+    const rows = ["Reg No,Full Name,Department,Year,Status",
+      ...students.map(s => `"${s.reg_no}","${s.full_name}","${s.department_name}","Year ${s.year_of_study}","${s.status}"`)
+    ];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "students_report.csv"; a.click();
+    setMsg("✅ Students report downloaded!");
+  };
+
+  const exportAttendanceRiskCSV = () => {
+    const rows = ["Reg No,Student Name,Course,Sessions Attended,Total Sessions,Attendance %,Status",
+      ...atRisk.attendance_risk.map(s => `"${s.reg_no}","${s.full_name}","${s.course_code}","${s.sessions_attended}","${s.total_sessions}","${s.attendance_percentage}%","${s.attendance_percentage < 50 ? "Critical" : "At Risk"}"`)
+    ];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "attendance_risk_report.csv"; a.click();
+    setMsg("✅ Attendance risk report downloaded!");
+  };
+
+  const exportPerformanceRiskCSV = () => {
+    const rows = ["Reg No,Student Name,Course,CAT Average,Exam Score,Final Score,Status",
+      ...atRisk.performance_risk.map(s => `"${s.reg_no}","${s.full_name}","${s.course_code}","${s.cat_average || 0}","${s.exam_score || 0}","${s.final_score}%","${s.performance_status === "failing" ? "Failing" : "At Risk"}"`)
+    ];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "performance_risk_report.csv"; a.click();
+    setMsg("✅ Performance risk report downloaded!");
+  };
+
+  const exportCoursesCSV = () => {
+    const rows = ["Code,Course Name,Department,Year,Credits,Enrolled,Sessions",
+      ...courses.map(c => `"${c.code}","${c.name}","${c.department_name}","Year ${c.year_of_study}","${c.credits}","${c.enrolled_count}","${c.total_sessions}"`)
+    ];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "courses_report.csv"; a.click();
+    setMsg("✅ Courses report downloaded!");
+  };
+
+  const reports = [
+    { title: "Students Report", desc: "Full list of all active students with their school and year", icon: "🎓", color: "#0a3d62", action: exportStudentsCSV, count: students.length },
+    { title: "Courses Report", desc: "All registered courses with enrollment and session counts", icon: "📚", color: "#148f77", action: exportCoursesCSV, count: courses.length },
+    { title: "Attendance Risk Report", desc: "Students below 75% attendance threshold", icon: "📋", color: "#c0392b", action: exportAttendanceRiskCSV, count: atRisk.attendance_risk.length },
+    { title: "Performance Risk Report", desc: "Students scoring below 50% in assessments", icon: "📉", color: "#e67e22", action: exportPerformanceRiskCSV, count: atRisk.performance_risk.length },
+  ];
+
+  return (
+    <div>
+      {msg && <div style={{ background: "#eafaf1", border: "1px solid #82e0aa", borderRadius: 10, padding: "12px 16px", color: "#1e8449", fontWeight: 600, fontSize: 13, marginBottom: 20 }}>{msg}</div>}
+
+      <div style={{ background: "white", borderRadius: 14, padding: 20, marginBottom: 20, boxShadow: "0 2px 8px #0000000d" }}>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 6, color: "#1a202c" }}>📄 Export Reports</div>
+        <div style={{ fontSize: 13, color: "#718096" }}>Download reports as CSV files that can be opened in Excel or Google Sheets.</div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}>
+        {reports.map((r, i) => (
+          <div key={i} style={{ background: "white", borderRadius: 14, padding: 24, boxShadow: "0 2px 8px #0000000d", border: `1px solid #f0f4f8` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+              <div style={{ width: 50, height: 50, borderRadius: 12, background: r.color + "18", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>{r.icon}</div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15, color: "#1a202c" }}>{r.title}</div>
+                <div style={{ fontSize: 12, color: "#718096", marginTop: 2 }}>{r.count} records</div>
+              </div>
+            </div>
+            <div style={{ fontSize: 13, color: "#718096", marginBottom: 16 }}>{r.desc}</div>
+            <button onClick={r.action}
+              style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: "none", background: r.color, color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              ⬇️ Download CSV
+            </button>
+          </div>
+        ))}
       </div>
     </div>
   );

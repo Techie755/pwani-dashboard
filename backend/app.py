@@ -84,42 +84,43 @@ def login():
     data = request.json
     email = data.get('email', '').strip()
     password = data.get('password', '').strip()
+    role_requested = data.get('role', '').strip()
     password_hash = hashlib.sha256(password.encode()).hexdigest()
 
-    # Check admin
-    admin = query("SELECT * FROM admin_users WHERE email = %s AND password_hash = %s", (email, password_hash), fetch='one')
-    if admin:
-        return json_response({
-            'success': True,
-            'role': 'admin',
-            'id': admin['id'],
-            'full_name': admin['full_name'],
-            'email': admin['email'],
-            'token': f"admin_{admin['id']}_{password_hash[:16]}"
-        })
+    if role_requested == 'admin':
+        admin = query("SELECT * FROM admin_users WHERE email = %s AND password_hash = %s", (email, password_hash), fetch='one')
+        if admin:
+            return json_response({
+                'success': True,
+                'role': 'admin',
+                'id': admin['id'],
+                'full_name': admin['full_name'],
+                'email': admin['email'],
+                'token': f"admin_{admin['id']}_{password_hash[:16]}"
+            })
+        return json_response({'success': False, 'error': 'Invalid admin credentials.'}, 401)
 
-    # Check lecturer
-    lecturer = query("SELECT * FROM lecturers WHERE email = %s AND password_hash = %s AND is_active = 1", (email, password_hash), fetch='one')
-    if lecturer:
-        courses = query("""
-            SELECT c.* FROM courses c
-            WHERE c.id IN (
-                SELECT DISTINCT course_id FROM attendance_sessions WHERE lecturer_id = %s
-            )
-        """, (lecturer['id'],))
+    elif role_requested == 'lecturer':
+        print(f"DEBUG: email={email}, hash={password_hash}")
+        lecturer = query("SELECT * FROM lecturers WHERE email = %s AND password_hash = %s AND is_active = 1", (email, password_hash), fetch='one')
+        print(f"DEBUG: lecturer found = {lecturer}")
+        if lecturer:
+           courses = query("SELECT * FROM courses")
         return json_response({
-            'success': True,
-            'role': 'lecturer',
-            'id': lecturer['id'],
-            'full_name': lecturer['full_name'],
-            'email': lecturer['email'],
-            'staff_no': lecturer.get('staff_no'),
-            'department_id': lecturer.get('department_id'),
-            'token': f"lecturer_{lecturer['id']}_{password_hash[:16]}",
-            'courses': courses
-        })
+                'success': True,
+                'role': 'lecturer',
+                'id': lecturer['id'],
+                'full_name': lecturer['full_name'],
+                'email': lecturer['email'],
+                'staff_no': lecturer.get('staff_no'),
+                'department_id': lecturer.get('department_id'),
+                'token': f"lecturer_{lecturer['id']}_{password_hash[:16]}",
+                'courses': courses
+            })
+        return json_response({'success': False, 'error': 'Invalid lecturer credentials or account inactive.'}, 401)
 
-    return json_response({'success': False, 'error': 'Invalid email or password'}, 401)
+    return json_response({'success': False, 'error': 'Please select a login type.'}, 400)
+
 @app.route('/api/auth/register-lecturer', methods=['POST'])
 def register_lecturer():
     data = request.json
