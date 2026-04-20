@@ -569,6 +569,151 @@ function Overview({ overview, setPage, students, courses, user, isAdmin }) {
     </div>
   );
 }
+function Students({ students, departments, onRefresh }) {
+  const [search, setSearch] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+  const [filterDept, setFilterDept] = useState("");
+  const [form, setForm] = useState({ reg_no: "", full_name: "", email: "", phone: "", department_id: "1", year_of_study: "1", semester: "1", program: "" });
+
+  const filtered = students.filter(s =>
+    (s.full_name.toLowerCase().includes(search.toLowerCase()) || s.reg_no.toLowerCase().includes(search.toLowerCase())) &&
+    (filterDept === "" || s.department_id == filterDept)
+  );
+
+  const handleAdd = () => {
+    if (!form.reg_no || !form.full_name) return alert("Reg No and Full Name are required.");
+    axios.post(`${API}/students`, form)
+      .then(() => { setShowAdd(false); setForm({ reg_no: "", full_name: "", email: "", phone: "", department_id: "1", year_of_study: "1", semester: "1", program: "" }); onRefresh(); })
+      .catch(e => alert("Error: " + (e.response?.data?.error || e.message)));
+  };
+
+  const handleDelete = (id, name) => {
+    if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return;
+    axios.delete(`${API}/students/${id}`)
+      .then(() => onRefresh())
+      .catch(() => alert("Could not delete student."));
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search by name or reg no..."
+          style={{ flex: 1, minWidth: 200, padding: "10px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14 }} />
+        <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
+          style={{ padding: "10px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, minWidth: 200 }}>
+          <option value="">All Schools</option>
+          {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+        </select>
+        <button onClick={() => setShowAdd(!showAdd)}
+          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: "#0a3d62", color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+          + Add Student
+        </button>
+      </div>
+
+      {showAdd && (
+        <div style={{ background: "white", borderRadius: 14, padding: 24, marginBottom: 16, boxShadow: "0 4px 16px #0000001a", border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, color: "#1a202c" }}>➕ Add New Student</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>REG NO *</label>
+              <input placeholder="e.g. S/CS/009/2024" value={form.reg_no} onChange={e => setForm({ ...form, reg_no: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>FULL NAME *</label>
+              <input placeholder="e.g. John Doe Mwangi" value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>EMAIL</label>
+              <input placeholder="e.g. john@students.pu.ac.ke" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>PHONE</label>
+              <input placeholder="e.g. 0712345678" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>SCHOOL</label>
+              <select value={form.department_id} onChange={e => setForm({ ...form, department_id: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>PROGRAMME</label>
+              <select value={form.program} onChange={e => setForm({ ...form, program: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
+                <option value="">Select Programme</option>
+                {(PWANI_PROGRAMS_BY_SCHOOL[departments.find(d => d.id == form.department_id)?.name] || []).map((p, i) => (
+                  <option key={i} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>YEAR OF STUDY</label>
+              <select value={form.year_of_study} onChange={e => setForm({ ...form, year_of_study: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
+                {[1,2,3,4].map(y => <option key={y} value={y}>Year {y}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>SEMESTER</label>
+              <select value={form.semester} onChange={e => setForm({ ...form, semester: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
+                <option value="1">Semester 1</option>
+                <option value="2">Semester 2</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button onClick={handleAdd} style={{ padding: "10px 28px", borderRadius: 8, border: "none", background: "#0a3d62", color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>Save Student</button>
+            <button onClick={() => setShowAdd(false)} style={{ padding: "10px 28px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "white", fontWeight: 600, cursor: "pointer", fontSize: 14 }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 8px #0000000d" }}>
+        <div style={{ padding: "12px 16px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0", fontSize: 13, color: "#718096", fontWeight: 600 }}>
+          Showing {filtered.length} of {students.length} students
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#f0f4f8" }}>
+              {["Reg No", "Full Name", "School", "Programme", "Year", "Status", "Action"].map(h => (
+                <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#718096", textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((s, i) => (
+              <tr key={s.id} style={{ borderTop: "1px solid #f0f4f8", background: i % 2 === 0 ? "white" : "#fafbff" }}>
+                <td style={{ padding: "12px 16px", fontSize: 13, fontFamily: "monospace", color: "#0a3d62", fontWeight: 700 }}>{s.reg_no}</td>
+                <td style={{ padding: "12px 16px", fontWeight: 600, color: "#1a202c" }}>{s.full_name}</td>
+                <td style={{ padding: "12px 16px", fontSize: 12, color: "#718096" }}>{s.department_name}</td>
+                <td style={{ padding: "12px 16px", fontSize: 12, color: "#718096" }}>{s.program || "—"}</td>
+                <td style={{ padding: "12px 16px", fontSize: 13 }}>Year {s.year_of_study}</td>
+                <td style={{ padding: "12px 16px" }}>
+                  <span style={{ background: "#eafaf1", color: "#1e8449", border: "1px solid #82e0aa", borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700 }}>{s.status}</span>
+                </td>
+                <td style={{ padding: "12px 16px" }}>
+                  <button onClick={() => handleDelete(s.id, s.full_name)}
+                    style={{ padding: "5px 14px", borderRadius: 6, border: "1.5px solid #f1948a", background: "#fdf2f2", color: "#c0392b", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    🗑 Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td colSpan={7} style={{ textAlign: "center", padding: 50, color: "#a0aec0", fontSize: 14 }}>No students found</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function Courses({ courses, departments, onRefresh }) {
   const [showAdd, setShowAdd] = useState(false);
