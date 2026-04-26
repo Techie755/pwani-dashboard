@@ -120,21 +120,22 @@ def login():
         return json_response({'success': False, 'error': 'Invalid lecturer credentials or account inactive.'}, 401)
 
     return json_response({'success': False, 'error': 'Please select a login type.'}, 400)
-
 @app.route('/api/auth/register-lecturer', methods=['POST'])
 def register_lecturer():
     data = request.json
-    if not data.get('full_name') or not data.get('email') or not data.get('password') or not data.get('staff_no'):
-        return json_response({'error': 'All fields including Staff Number are required'}, 400)
+    if not data.get('staff_no') or not data.get('email') or not data.get('password'):
+        return json_response({'error': 'Staff No, Email and Password are required'}, 400)
+    lecturer = query("SELECT * FROM lecturers WHERE staff_no = %s AND email = %s AND is_active = 1",
+                    (data['staff_no'], data['email']), fetch='one')
+    if not lecturer:
+        return json_response({'error': 'Staff No and Email do not match our records. Contact admin.'}, 400)
+    if lecturer.get('password_hash'):
+        return json_response({'error': 'Account already set up. Please login instead.'}, 400)
+    if len(data['password']) < 6:
+        return json_response({'error': 'Password must be at least 6 characters'}, 400)
     password_hash = hashlib.sha256(data['password'].encode()).hexdigest()
-    existing = query("SELECT id FROM lecturers WHERE email = %s OR staff_no = %s", (data['email'], data['staff_no']), fetch='one')
-    if existing:
-        return json_response({'error': 'Email or Staff Number already registered'}, 400)
-    lid = execute("""
-        INSERT INTO lecturers (staff_no, full_name, email, password_hash, role, department_id, is_active)
-        VALUES (%s, %s, %s, %s, 'lecturer', %s, 1)
-    """, (data['staff_no'], data['full_name'], data['email'], password_hash, data.get('department_id', 1)))
-    return json_response({'id': lid, 'message': 'Lecturer registered successfully'}, 201)
+    execute("UPDATE lecturers SET password_hash = %s WHERE id = %s", (password_hash, lecturer['id']))
+    return json_response({'message': 'Password set successfully! You can now login.'}, 200)
 @app.route('/api/auth/forgot-password', methods=['POST'])
 def forgot_password():
     data = request.json
@@ -156,6 +157,20 @@ def forgot_password():
         execute("UPDATE lecturers SET password_hash = %s WHERE email = %s", (new_hash, email))
         return json_response({'message': 'Password reset successfully'})
     return json_response({'error': 'Email not found in our system'}, 404)
+@app.route('/api/admin/register-lecturer', methods=['POST'])
+def admin_register_lecturer():
+    data = request.json
+    if not data.get('staff_no') or not data.get('full_name') or not data.get('email'):
+        return json_response({'error': 'Staff No, Full Name and Email are required'}, 400)
+    existing = query("SELECT id FROM lecturers WHERE email = %s OR staff_no = %s",
+                    (data['email'], data['staff_no']), fetch='one')
+    if existing:
+        return json_response({'error': 'Email or Staff Number already registered'}, 400)
+    lid = execute("""
+        INSERT INTO lecturers (staff_no, full_name, email, role, department_id, is_active)
+        VALUES (%s, %s, %s, 'lecturer', %s, 1)
+    """, (data['staff_no'], data['full_name'], data['email'], data.get('department_id', 1)))
+    return json_response({'id': lid, 'message': 'Lecturer registered successfully'}, 201)
 
 @app.route('/api/lecturers', methods=['GET'])
 def get_lecturers():

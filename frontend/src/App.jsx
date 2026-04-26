@@ -402,7 +402,10 @@ function LoginPage({ onLogin }) {
           )}
 
           {tab === "register" && mode === "lecturer" && (
-            <div>
+           <div>
+            <div style={{ background: "#eaf4fb", border: "1px solid #85c1e9", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
+                ℹ️ Enter your <strong>Staff Number</strong> and <strong>Email</strong> as registered by the admin, then set your password.
+              </div>
               {[
                 { label: "STAFF NUMBER *", key: "staff_no", placeholder: "e.g. PU/STAFF/001", type: "text" },
                 { label: "FULL NAME *", key: "full_name", placeholder: "e.g. Dr. John Mwangi", type: "text" },
@@ -1399,12 +1402,27 @@ function Enrollments({ students, courses }) {
     </div>
   );
 }
-
 function LecturersAdmin() {
   const [lecturers, setLecturers] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [departments, setDepartments] = useState([]);
+  const [form, setForm] = useState({ staff_no: "", full_name: "", email: "", department_id: "1" });
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
 
   const load = () => axios.get(`${API}/lecturers`).then(r => setLecturers(r.data)).catch(() => {});
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    load();
+    axios.get(`${API}/departments`).then(r => setDepartments(r.data)).catch(() => {});
+  }, []);
+
+  const handleAdd = () => {
+    if (!form.staff_no || !form.full_name || !form.email) return setError("All fields are required.");
+    axios.post(`${API}/admin/register-lecturer`, form)
+      .then(() => { setMsg("✅ Lecturer registered! They can now set their password on the portal."); setShowAdd(false); setForm({ staff_no: "", full_name: "", email: "", department_id: "1" }); load(); })
+      .catch(e => setError(e.response?.data?.error || "Error registering lecturer."));
+  };
 
   const toggleActive = (id, current) => {
     if (!window.confirm(`${current ? "Deactivate" : "Activate"} this lecturer?`)) return;
@@ -1413,6 +1431,53 @@ function LecturersAdmin() {
 
   return (
     <div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+        <button onClick={() => { setShowAdd(!showAdd); setError(""); setMsg(""); }}
+          style={{ padding: "10px 20px", borderRadius: 8, border: "none", background: "#0a3d62", color: "white", fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+          + Register Lecturer
+        </button>
+      </div>
+
+      {msg && <div style={{ background: "#eafaf1", border: "1px solid #82e0aa", borderRadius: 10, padding: "12px 16px", color: "#1e8449", fontWeight: 600, fontSize: 13, marginBottom: 16 }}>{msg}</div>}
+      {error && <div style={{ background: "#fdf2f2", border: "1px solid #f1948a", borderRadius: 10, padding: "12px 16px", color: "#c0392b", fontWeight: 600, fontSize: 13, marginBottom: 16 }}>{error}</div>}
+
+      {showAdd && (
+        <div style={{ background: "white", borderRadius: 14, padding: 24, marginBottom: 16, boxShadow: "0 4px 16px #0000001a", border: "1px solid #e2e8f0" }}>
+          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, color: "#1a202c" }}>➕ Register New Lecturer</div>
+          <div style={{ background: "#eaf4fb", border: "1px solid #85c1e9", borderRadius: 8, padding: "10px 14px", fontSize: 13, marginBottom: 16 }}>
+            ℹ️ The lecturer will use their <strong>Staff No</strong> and <strong>Email</strong> to verify and set their password on the portal.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>STAFF NUMBER *</label>
+              <input placeholder="e.g. PU/STAFF/001" value={form.staff_no} onChange={e => setForm({ ...form, staff_no: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>FULL NAME *</label>
+              <input placeholder="e.g. Dr. John Mwangi" value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>EMAIL ADDRESS *</label>
+              <input placeholder="e.g. john@pu.ac.ke" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#718096", display: "block", marginBottom: 4 }}>SCHOOL</label>
+              <select value={form.department_id} onChange={e => setForm({ ...form, department_id: e.target.value })}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #e2e8f0", fontSize: 14, boxSizing: "border-box" }}>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button onClick={handleAdd} style={{ padding: "10px 28px", borderRadius: 8, border: "none", background: "#0a3d62", color: "white", fontWeight: 700, cursor: "pointer" }}>Save</button>
+            <button onClick={() => setShowAdd(false)} style={{ padding: "10px 28px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "white", fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
       <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 2px 8px #0000000d" }}>
         <div style={{ padding: "14px 18px", background: "#f0f4f8", borderBottom: "1px solid #e2e8f0", fontWeight: 800, fontSize: 15 }}>
           👨‍🏫 Registered Lecturers ({lecturers.length})
@@ -1420,7 +1485,7 @@ function LecturersAdmin() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#f8fafc" }}>
-              {["Staff No", "Full Name", "Email", "School", "Role", "Status", "Action"].map(h => (
+              {["Staff No", "Full Name", "Email", "School", "Status", "Password Set", "Action"].map(h => (
                 <th key={h} style={{ padding: "11px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#718096", textTransform: "uppercase" }}>{h}</th>
               ))}
             </tr>
@@ -1433,13 +1498,13 @@ function LecturersAdmin() {
                 <td style={{ padding: "11px 16px", fontSize: 13, color: "#718096" }}>{l.email}</td>
                 <td style={{ padding: "11px 16px", fontSize: 12, color: "#718096" }}>{l.department_name}</td>
                 <td style={{ padding: "11px 16px" }}>
-                  <span style={{ background: l.role === "admin" ? "#fff8e1" : "#eaf4fb", color: l.role === "admin" ? "#f39c12" : "#1a6b8a", borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
-                    {l.role === "admin" ? "👑 Admin" : "👨‍🏫 Lecturer"}
+                  <span style={{ background: l.is_active ? "#eafaf1" : "#fdf2f2", color: l.is_active ? "#1e8449" : "#c0392b", borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
+                    {l.is_active ? "Active" : "Inactive"}
                   </span>
                 </td>
                 <td style={{ padding: "11px 16px" }}>
-                  <span style={{ background: l.is_active ? "#eafaf1" : "#fdf2f2", color: l.is_active ? "#1e8449" : "#c0392b", borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
-                    {l.is_active ? "Active" : "Inactive"}
+                  <span style={{ background: l.password_hash ? "#eafaf1" : "#fff8e1", color: l.password_hash ? "#1e8449" : "#e67e22", borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700 }}>
+                    {l.password_hash ? "✅ Set" : "⏳ Pending"}
                   </span>
                 </td>
                 <td style={{ padding: "11px 16px" }}>
